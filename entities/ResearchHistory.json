@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "question": {
+      "type": "string"
+    },
+    "context_profile": {
+      "type": "object"
+    },
+    "models_used": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "results": {
+      "type": "object"
+    },
+    "consolidated": {
+      "type": "string"
+    },
+    "gateway": {
+      "type": "string"
+    }
+  },
+  "required": [],
+  "name": "ResearchHistory"
+}
