@@ -63,7 +63,6 @@ const DEFAULT_SETTINGS = {
   theme: "light",
 };
 
-const APP_URL = "https://smart-boy-app-0e7bef6a.base44.app";
 const APP_PASSWORD = "Cloud@bdx1";
 
 // ─── Utils ───────────────────────────────────────────────────────────────────
@@ -89,6 +88,67 @@ function detectGateway(apiKey) {
   if (apiKey.length > 60) return "together";
   return "openrouter";
 }
+// ─── Direct API call (frontend → OpenRouter/APIs directly) ───────────────────
+const OPENROUTER_MODELS = {
+  openai:     "openai/gpt-4o",
+  gemini:     "google/gemini-2.0-flash-001",
+  deepseek:   "deepseek/deepseek-chat",
+  perplexity: "perplexity/sonar",
+  claude:     "anthropic/claude-3.5-sonnet",
+  llama:      "meta-llama/llama-3.3-70b-instruct",
+};
+
+async function callModelDirect(modelId, prompt, apiKey) {
+  const gateway = detectGateway(apiKey);
+  const start = Date.now();
+  try {
+    let url, headers, body, modelName;
+
+    if (gateway === "openrouter") {
+      url = "https://openrouter.ai/api/v1/chat/completions";
+      modelName = OPENROUTER_MODELS[modelId] || modelId;
+      headers = { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey, "HTTP-Referer": "https://ia.jonasnetto.com.br", "X-Title": "JonasNetto IA" };
+      body = JSON.stringify({ model: modelName, messages: [{ role: "user", content: prompt }], max_tokens: 1500 });
+    } else if (gateway === "openai") {
+      url = "https://api.openai.com/v1/chat/completions";
+      modelName = "gpt-4o";
+      headers = { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey };
+      body = JSON.stringify({ model: modelName, messages: [{ role: "user", content: prompt }], max_tokens: 1500 });
+    } else if (gateway === "anthropic") {
+      url = "https://api.anthropic.com/v1/messages";
+      modelName = "claude-3-5-sonnet-20241022";
+      headers = { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" };
+      body = JSON.stringify({ model: modelName, max_tokens: 1500, messages: [{ role: "user", content: prompt }] });
+    } else if (gateway === "groq") {
+      url = "https://api.groq.com/openai/v1/chat/completions";
+      modelName = "llama3-70b-8192";
+      headers = { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey };
+      body = JSON.stringify({ model: modelName, messages: [{ role: "user", content: prompt }], max_tokens: 1500 });
+    } else {
+      url = "https://api.together.xyz/v1/chat/completions";
+      modelName = "meta-llama/Llama-3-70b-chat-hf";
+      headers = { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey };
+      body = JSON.stringify({ model: modelName, messages: [{ role: "user", content: prompt }], max_tokens: 1500 });
+    }
+
+    const res = await fetch(url, { method: "POST", headers, body });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || "Erro na API (" + res.status + ")");
+
+    let response;
+    if (gateway === "anthropic") {
+      response = data.content?.[0]?.text;
+    } else {
+      response = data.choices?.[0]?.message?.content;
+    }
+    if (!response) throw new Error("Resposta vazia da API");
+    return { response, time: Date.now() - start, gateway };
+  } catch (err) {
+    return { error: err.message, time: Date.now() - start };
+  }
+}
+
+
 
 function formatText(text, isLight) {
   if (!text) return "";
@@ -420,7 +480,7 @@ function HistoryModal({ T, onClose, onRestore }) {
 
   const handleDelete = async (id) => {
     setDeleting(id);
-    await ResearchHistory.delete(id);
+    try { await ResearchHistory.delete(id); } catch(e) {}
     setHistory(prev => prev.filter(h => h.id !== id));
     setDeleting(null);
   };
@@ -612,12 +672,13 @@ function HomeApp() {
         const attachText = textAttachments.map(a => "[Arquivo: " + a.name + "]\n" + a.content).join("\n\n---\n\n");
         fullPrompt += "\n\n[Anexos]\n" + attachText;
       }
-      const res = await fetch(APP_URL + "/functions/queryAI", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: fullPrompt, models: selectedModels, apiKey: currentSettings.apiKey, imageBase64: imageAttachment }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      const modelResults = await Promise.all(
+        selectedModels.map(async (modelId) => {
+          const result = await callModelDirect(modelId, fullPrompt, currentSettings.apiKey);
+          return [modelId, result];
+        })
+      );
+      const data = { results: Object.fromEntries(modelResults), gateway: detectGateway(currentSettings.apiKey) };
       setResults(data.results);
       setLastQuestion(prompt);
       const ranked = Object.entries(data.results || {})
@@ -627,14 +688,16 @@ function HomeApp() {
       setSpeedRanking(ranked);
       if (data.gateway) setActiveGateway(data.gateway);
       setAttachments([]);
-      await ResearchHistory.create({
-        question: prompt,
-        context_profile: hasContext ? context : {},
-        models_used: selectedModels,
-        results: data.results,
-        consolidated: "",
-        gateway: data.gateway || "",
-      });
+      try {
+        await ResearchHistory.create({
+          question: prompt,
+          context_profile: hasContext ? context : {},
+          models_used: selectedModels,
+          results: data.results,
+          consolidated: "",
+          gateway: data.gateway || "",
+        });
+      } catch(e) { /* histórico indisponível */ }
       const firstSuccess = Object.values(data.results || {}).find(r => r.response && !r.error);
       if (firstSuccess) {
         const ans = firstSuccess.response.length > 500 ? firstSuccess.response.slice(0, 500) + "..." : firstSuccess.response;
@@ -656,17 +719,19 @@ function HomeApp() {
     }).join("\n\n---\n\n");
     const consolidationPrompt = "Voce e um especialista em sintese de informacoes. Abaixo estao respostas de diferentes modelos de IA para a mesma pergunta.\n\nPERGUNTA ORIGINAL:\n" + lastQuestion + "\n\nRESPOSTAS:\n" + responsesText + "\n\nTAREFA: Analise e gere uma versao consolidada que combine os melhores pontos, resolva contradicoes, elimine redundancias e produza um texto coeso. Indique consensos e divergencias.";
     try {
-      const consolidateRes = await fetch(APP_URL + "/functions/queryAI", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: consolidationPrompt, models: [currentSettings.consolidationModel], apiKey: currentSettings.apiKey }),
-      });
-      const consolidateData = await consolidateRes.json();
-      if (consolidateData.error) throw new Error(consolidateData.error);
-      const r = consolidateData.results?.[currentSettings.consolidationModel];
-      if (r?.response) {
-        setConsolidated(r.response);
-        try { const matches = await ResearchHistory.filter({ question: lastQuestion }); if (matches && matches[0]) await ResearchHistory.update(matches[0].id, { consolidated: r.response }); } catch(e) {}
-      } else { throw new Error(r?.error || "Sem resposta"); }
+      // Tenta o modelo escolhido, depois fallback para outros disponíveis
+      const fallbackOrder = [currentSettings.consolidationModel, ...["openai","gemini","deepseek","llama"].filter(m => m !== currentSettings.consolidationModel)];
+      let consolResult = null;
+      let lastErr = "Sem resposta";
+      for (const modelId of fallbackOrder) {
+        const attempt = await callModelDirect(modelId, consolidationPrompt, currentSettings.apiKey);
+        if (attempt?.response && !attempt.error) { consolResult = attempt; break; }
+        lastErr = attempt?.error || lastErr;
+      }
+      if (consolResult?.response) {
+        setConsolidated(consolResult.response);
+        try { const matches = await ResearchHistory.filter({ question: lastQuestion }); if (matches && matches[0]) await ResearchHistory.update(matches[0].id, { consolidated: consolResult.response }); } catch(e) {}
+      } else { throw new Error(lastErr); }
     } catch (err) { setConsolidated("Erro na consolidação: " + err.message); }
     finally { setConsolidating(false); }
   };
