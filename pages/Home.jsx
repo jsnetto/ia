@@ -150,6 +150,233 @@ async function callModelDirect(modelId, prompt, apiKey) {
 
 
 
+// ─── Markdown Renderer ───────────────────────────────────────────────────────
+function parseInline(text, T) {
+  if (!text) return [];
+  const codeBg = T.isLight ? "rgba(0,0,0,0.06)" : "rgba(0,0,0,0.3)";
+  const result = [];
+  // Process inline: code, bold, italic, image, link, strikethrough
+  const regex = /(!\[([^\]]*?)\]\(([^)]+)\))|(`([^`]+)`)|\[([^\]]+?)\]\(([^)]+?)\)|(\*\*\*(.+?)\*\*\*)|(\*\*(.+?)\*\*(?!\*))|(__(.+?)__)|(_(.+?)_)|(\*(.+?)\*(?!\*))|~~(.+?)~~/gs;
+  let last = 0, m, key = 0;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > last) result.push(<span key={key++}>{text.slice(last, m.index)}</span>);
+    if (m[1]) { // image ![alt](src)
+      result.push(<img key={key++} src={m[3]} alt={m[2] || ""} style={{ maxWidth: "100%", borderRadius: 8, margin: "4px 0", display: "block" }} onError={(e) => { e.target.style.display = "none"; }} />);
+    } else if (m[4]) { // `code`
+      result.push(<code key={key++} style={{ background: codeBg, padding: "2px 6px", borderRadius: 4, fontFamily: "monospace", fontSize: "0.85em" }}>{m[5]}</code>);
+    } else if (m[6]) { // [text](url)
+      result.push(<a key={key++} href={m[7]} target="_blank" rel="noopener noreferrer" style={{ color: T.accent, textDecoration: "underline" }}>{m[6]}</a>);
+    } else if (m[8]) { // ***bold italic***
+      result.push(<strong key={key++}><em>{m[9]}</em></strong>);
+    } else if (m[10]) { // **bold**
+      result.push(<strong key={key++}>{m[11]}</strong>);
+    } else if (m[12]) { // __bold__
+      result.push(<strong key={key++}>{m[13]}</strong>);
+    } else if (m[14]) { // _italic_
+      result.push(<em key={key++}>{m[15]}</em>);
+    } else if (m[16]) { // *italic*
+      result.push(<em key={key++}>{m[17]}</em>);
+    } else if (m[18] !== undefined) { // ~~strike~~
+      result.push(<del key={key++}>{m[18]}</del>);
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) result.push(<span key={key++}>{text.slice(last)}</span>);
+  return result;
+}
+
+function MarkdownRenderer({ text, T }) {
+  if (!text) return null;
+  const codeBg = T.isLight ? "rgba(0,0,0,0.06)" : "rgba(0,0,0,0.3)";
+  const codeBorder = T.isLight ? "#e5e7eb" : "#2a2a2e";
+  const tableBg = T.isLight ? "#f9fafb" : "rgba(255,255,255,0.03)";
+  const tableHeadBg = T.isLight ? "#f3f4f6" : "rgba(255,255,255,0.06)";
+  const tableBorder = T.isLight ? "#e5e7eb" : "rgba(255,255,255,0.1)";
+
+  const lines = text.split("\n");
+  const elements = [];
+  let i = 0, key = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // ── Fenced code block ─────────────────────────────────────
+    if (/^```/.test(line)) {
+      const lang = line.replace(/^```/, "").trim();
+      const codeLines = [];
+      i++;
+      while (i < lines.length && !/^```/.test(lines[i])) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      elements.push(
+        <div key={key++} style={{ margin: "12px 0", borderRadius: 8, overflow: "hidden", border: "1px solid " + codeBorder }}>
+          {lang && (
+            <div style={{ padding: "4px 14px", background: T.isLight ? "#e5e7eb" : "#1f1f27", fontSize: "0.72rem", color: T.textDim, fontFamily: "monospace", borderBottom: "1px solid " + codeBorder }}>
+              {lang}
+            </div>
+          )}
+          <pre style={{ margin: 0, padding: "14px 16px", background: codeBg, overflowX: "auto", fontSize: "0.83rem", lineHeight: 1.6, color: T.text, fontFamily: "'Fira Code', 'Courier New', monospace", whiteSpace: "pre" }}>
+            <code>{codeLines.join("\n")}</code>
+          </pre>
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    // ── Headings ──────────────────────────────────────────────
+    const h6 = /^######\s+(.+)$/.exec(line);
+    const h5 = /^#####\s+(.+)$/.exec(line);
+    const h4 = /^####\s+(.+)$/.exec(line);
+    const h3 = /^###\s+(.+)$/.exec(line);
+    const h2 = /^##\s+(.+)$/.exec(line);
+    const h1 = /^#\s+(.+)$/.exec(line);
+    if (h6) { elements.push(<h6 key={key++} style={{ margin: "8px 0 4px", fontSize: "0.82rem", color: T.text }}>{parseInline(h6[1], T)}</h6>); i++; continue; }
+    if (h5) { elements.push(<h5 key={key++} style={{ margin: "8px 0 4px", fontSize: "0.87rem", color: T.text }}>{parseInline(h5[1], T)}</h5>); i++; continue; }
+    if (h4) { elements.push(<h4 key={key++} style={{ margin: "10px 0 4px", fontSize: "0.93rem", color: T.text }}>{parseInline(h4[1], T)}</h4>); i++; continue; }
+    if (h3) { elements.push(<h3 key={key++} style={{ margin: "12px 0 6px", fontSize: "1rem", color: T.text, borderBottom: "1px solid " + codeBorder, paddingBottom: 4 }}>{parseInline(h3[1], T)}</h3>); i++; continue; }
+    if (h2) { elements.push(<h2 key={key++} style={{ margin: "14px 0 6px", fontSize: "1.1rem", color: T.text, borderBottom: "1px solid " + codeBorder, paddingBottom: 4 }}>{parseInline(h2[1], T)}</h2>); i++; continue; }
+    if (h1) { elements.push(<h1 key={key++} style={{ margin: "16px 0 8px", fontSize: "1.25rem", color: T.text }}>{parseInline(h1[1], T)}</h1>); i++; continue; }
+
+    // ── Horizontal rule ───────────────────────────────────────
+    if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+      elements.push(<hr key={key++} style={{ border: "none", borderTop: "1px solid " + codeBorder, margin: "14px 0" }} />);
+      i++; continue;
+    }
+
+    // ── Table ─────────────────────────────────────────────────
+    if (/^\|.+\|/.test(line) && i + 1 < lines.length && /^\|[-: |]+\|/.test(lines[i + 1])) {
+      const headerCells = line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim());
+      const alignLine = lines[i + 1];
+      const aligns = alignLine.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => {
+        c = c.trim();
+        if (/^:-+:$/.test(c)) return "center";
+        if (/^-+:$/.test(c)) return "right";
+        return "left";
+      });
+      i += 2;
+      const rows = [];
+      while (i < lines.length && /^\|.+\|/.test(lines[i])) {
+        rows.push(lines[i].trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim()));
+        i++;
+      }
+      elements.push(
+        <div key={key++} style={{ overflowX: "auto", margin: "12px 0" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.86rem", background: tableBg, borderRadius: 8, overflow: "hidden", border: "1px solid " + tableBorder }}>
+            <thead>
+              <tr style={{ background: tableHeadBg }}>
+                {headerCells.map((cell, ci) => (
+                  <th key={ci} style={{ padding: "8px 12px", textAlign: aligns[ci] || "left", fontWeight: 700, color: T.text, borderBottom: "2px solid " + tableBorder, whiteSpace: "nowrap", border: "1px solid " + tableBorder }}>
+                    {parseInline(cell, T)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, ri) => (
+                <tr key={ri} style={{ background: ri % 2 === 0 ? "transparent" : (T.isLight ? "rgba(0,0,0,0.02)" : "rgba(255,255,255,0.02)") }}>
+                  {headerCells.map((_, ci) => (
+                    <td key={ci} style={{ padding: "7px 12px", textAlign: aligns[ci] || "left", color: T.text, border: "1px solid " + tableBorder }}>
+                      {parseInline(row[ci] || "", T)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      continue;
+    }
+
+    // ── Blockquote ────────────────────────────────────────────
+    if (/^>\s*/.test(line)) {
+      const quoteLines = [];
+      while (i < lines.length && /^>\s*/.test(lines[i])) {
+        quoteLines.push(lines[i].replace(/^>\s*/, ""));
+        i++;
+      }
+      elements.push(
+        <blockquote key={key++} style={{ borderLeft: "3px solid " + T.accent, paddingLeft: 14, margin: "10px 0", color: T.textMuted, fontStyle: "italic", fontSize: "0.9rem" }}>
+          {quoteLines.map((ql, qi) => <div key={qi}>{parseInline(ql, T)}</div>)}
+        </blockquote>
+      );
+      continue;
+    }
+
+    // ── Unordered list ────────────────────────────────────────
+    if (/^([\*\-\+])\s+/.test(line)) {
+      const items = [];
+      const baseIndent = line.match(/^(\s*)/)[1].length;
+      while (i < lines.length && (/^\s*[\*\-\+]\s+/.test(lines[i]) || /^\s{2,}/.test(lines[i]))) {
+        const m = lines[i].match(/^(\s*)[\*\-\+]\s+(.*)/);
+        if (m) {
+          items.push({ indent: m[1].length, text: m[2] });
+        }
+        i++;
+      }
+      elements.push(
+        <ul key={key++} style={{ paddingLeft: 20, margin: "8px 0", lineHeight: 1.75 }}>
+          {items.map((item, ii) => (
+            <li key={ii} style={{ color: T.text, marginBottom: 2, marginLeft: Math.max(0, item.indent - baseIndent) * 12, listStyleType: item.indent > baseIndent ? "circle" : "disc" }}>
+              {parseInline(item.text, T)}
+            </li>
+          ))}
+        </ul>
+      );
+      continue;
+    }
+
+    // ── Ordered list ──────────────────────────────────────────
+    if (/^\d+\.\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+        const m = lines[i].match(/^\s*\d+\.\s+(.*)/);
+        if (m) items.push(m[1]);
+        i++;
+      }
+      elements.push(
+        <ol key={key++} style={{ paddingLeft: 22, margin: "8px 0", lineHeight: 1.75 }}>
+          {items.map((item, ii) => (
+            <li key={ii} style={{ color: T.text, marginBottom: 2 }}>{parseInline(item, T)}</li>
+          ))}
+        </ol>
+      );
+      continue;
+    }
+
+    // ── Standalone image ──────────────────────────────────────
+    const imgMatch = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(line.trim());
+    if (imgMatch) {
+      elements.push(
+        <div key={key++} style={{ margin: "12px 0", textAlign: "center" }}>
+          <img src={imgMatch[2]} alt={imgMatch[1]} style={{ maxWidth: "100%", borderRadius: 10, boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }} onError={(e) => { e.target.style.display = "none"; }} />
+          {imgMatch[1] && <div style={{ fontSize: "0.78rem", color: T.textDim, marginTop: 6 }}>{imgMatch[1]}</div>}
+        </div>
+      );
+      i++; continue;
+    }
+
+    // ── Empty line ────────────────────────────────────────────
+    if (line.trim() === "") {
+      elements.push(<div key={key++} style={{ height: 8 }} />);
+      i++; continue;
+    }
+
+    // ── Normal paragraph line ─────────────────────────────────
+    elements.push(
+      <p key={key++} style={{ margin: "3px 0", lineHeight: 1.75, color: T.text }}>
+        {parseInline(line, T)}
+      </p>
+    );
+    i++;
+  }
+
+  return <div style={{ fontSize: "0.88rem", lineHeight: 1.75, wordBreak: "break-word" }}>{elements}</div>;
+}
+
+// Legacy helper (still used by history mini-preview)
 function formatText(text, isLight) {
   if (!text) return "";
   const codeBg = isLight ? "rgba(0,0,0,0.06)" : "rgba(0,0,0,0.3)";
@@ -532,14 +759,14 @@ function HistoryModal({ T, onClose, onRestore }) {
                       return (
                         <div key={modelId} style={{ marginBottom: 10 }}>
                           <div style={{ fontSize: "0.75rem", fontWeight: 700, color: modInfo ? modInfo.color : T.textMuted, marginBottom: 4 }}>{modInfo ? modInfo.icon + " " + modInfo.name : modelId}</div>
-                          <div style={{ fontSize: "0.82rem", color: T.text, lineHeight: 1.6, maxHeight: 120, overflowY: "auto" }} dangerouslySetInnerHTML={{ __html: formatText(r.response || r.error || "", T.isLight) }} />
+                          <div style={{ fontSize: "0.82rem", color: T.text, lineHeight: 1.6, maxHeight: 120, overflowY: "auto" }}><MarkdownRenderer text={r.response || r.error || ""} T={T} /></div>
                         </div>
                       );
                     })}
                     {h.consolidated && (
                       <div style={{ marginTop: 10, padding: "10px 12px", background: T.consolidateBg, border: "1px solid " + T.consolidateBorder, borderRadius: 8 }}>
                         <div style={{ fontSize: "0.75rem", fontWeight: 700, color: T.isLight ? "#92400e" : "#fbbf24", marginBottom: 4 }}>✨ Consolidação</div>
-                        <div style={{ fontSize: "0.82rem", color: T.text, lineHeight: 1.6, maxHeight: 120, overflowY: "auto" }} dangerouslySetInnerHTML={{ __html: formatText(h.consolidated, T.isLight) }} />
+                        <div style={{ fontSize: "0.82rem", color: T.text, lineHeight: 1.6, maxHeight: 120, overflowY: "auto" }}><MarkdownRenderer text={h.consolidated} T={T} /></div>
                       </div>
                     )}
                   </div>
@@ -1000,7 +1227,7 @@ function HomeApp() {
                     <div style={{ padding: 18 }}>
                       {r.error
                         ? <div style={{ color: T.errorText, fontSize: "0.85rem", background: T.errorBg, padding: "10px 14px", borderRadius: 8, border: "1px solid " + T.errorBorder }}>⚠️ {r.error}</div>
-                        : <div style={{ color: T.text, fontSize: "0.88rem", lineHeight: 1.75 }} dangerouslySetInnerHTML={{ __html: formatText(r.response, T.isLight) }} />}
+                        : <MarkdownRenderer text={r.response} T={T} />}
                     </div>
                   </div>
                 );
@@ -1030,7 +1257,7 @@ function HomeApp() {
                 <div style={{ padding: 18 }}>
                   {consolidating
                     ? <div style={{ display: "flex", gap: 8, alignItems: "center", color: T.textMuted, fontSize: "0.88rem" }}><span style={{ width: 13, height: 13, border: "2px solid " + T.textDim, borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} /> Analisando e consolidando...</div>
-                    : <div style={{ color: T.text, fontSize: "0.88rem", lineHeight: 1.75 }} dangerouslySetInnerHTML={{ __html: formatText(consolidated, T.isLight) }} />}
+                    : <MarkdownRenderer text={consolidated} T={T} />}
                 </div>
               </div>
             )}
