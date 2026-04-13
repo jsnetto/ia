@@ -58,12 +58,11 @@ const CONTEXT_FIELDS = [
 ];
 
 const DEFAULT_SETTINGS = {
-  apiKey: "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",
+  apiKey: "",
   consolidationModel: "claude",
   theme: "light",
 };
 
-const APP_PASSWORD = "Cloud@bdx1";
 
 // ─── Utils ───────────────────────────────────────────────────────────────────
 function loadSettings() {
@@ -77,7 +76,15 @@ function loadSavedPrompts() {
   try { return JSON.parse(localStorage.getItem("jn_saved_prompts") || "[]"); } catch { return []; }
 }
 function saveSavedPrompts(arr) { localStorage.setItem("jn_saved_prompts", JSON.stringify(arr)); }
-function checkAuth() { try { return localStorage.getItem("jn_auth") === "ok"; } catch { return false; } }
+function checkAuth() {
+  try {
+    const token = localStorage.getItem("jn_auth_token");
+    if (!token) return false;
+    // Valida formato do token (base64 com prefixo jn-auth-)
+    const decoded = atob(token);
+    return decoded.startsWith("jn-auth-");
+  } catch { return false; }
+}
 
 function detectGateway(apiKey) {
   if (!apiKey) return "openrouter";
@@ -591,9 +598,32 @@ function LoginScreen({ onAuth }) {
   const [pwd, setPwd] = useState("");
   const [loginError, setLoginError] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
-  const handleLogin = () => {
-    if (pwd === APP_PASSWORD) { localStorage.setItem("jn_auth", "ok"); onAuth(); }
-    else { setLoginError(true); setPwd(""); setTimeout(() => setLoginError(false), 2000); }
+  const [checking, setChecking] = useState(false);
+  const handleLogin = async () => {
+    if (!pwd.trim() || checking) return;
+    setChecking(true);
+    try {
+      const res = await fetch("https://smart-boy-67510347.base44.app/functions/checkPassword", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pwd }),
+      });
+      const data = await res.json();
+      if (data.ok && data.token) {
+        localStorage.setItem("jn_auth_token", data.token);
+        onAuth();
+      } else {
+        setLoginError(true);
+        setPwd("");
+        setTimeout(() => setLoginError(false), 2000);
+      }
+    } catch {
+      setLoginError(true);
+      setPwd("");
+      setTimeout(() => setLoginError(false), 2000);
+    } finally {
+      setChecking(false);
+    }
   };
   return (
     <div style={{ minHeight: "100vh", background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', -apple-system, sans-serif" }}>
@@ -617,9 +647,11 @@ function LoginScreen({ onAuth }) {
           </button>
         </div>
         {loginError && <p style={{ color: "#dc2626", fontSize: "0.82rem", margin: "0 0 12px" }}>Senha incorreta. Tente novamente.</p>}
-        <button type="button" onClick={handleLogin}
-          style={{ width: "100%", padding: "11px", borderRadius: 10, border: "none", background: "#001969", color: "#fff", fontWeight: 700, fontSize: "0.95rem", cursor: "pointer", boxShadow: "0 2px 10px rgba(0,25,105,0.25)" }}>
-          Entrar
+        <button type="button" onClick={handleLogin} disabled={checking}
+          style={{ width: "100%", padding: "11px", borderRadius: 10, border: "none", background: checking ? "#6b7280" : "#001969", color: "#fff", fontWeight: 700, fontSize: "0.95rem", cursor: checking ? "not-allowed" : "pointer", boxShadow: "0 2px 10px rgba(0,25,105,0.25)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          {checking
+            ? <><span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} /> Verificando...</>
+            : "Entrar"}
         </button>
       </div>
     </div>
@@ -630,10 +662,83 @@ function LoginScreen({ onAuth }) {
 function SettingsModal({ onClose, onThemeChange }) {
   const [settings, setSettings] = useState(loadSettings());
   const [saved, setSaved] = useState(false);
-  const [showKey, setShowKey] = useState(false);
   const T = getTheme(settings.theme);
-  const detectedGateway = detectGateway(settings.apiKey);
-  const gatewayInfo = GATEWAYS.find((g) => g.id === detectedGateway);
+
+  // API Key Admin Section
+  const [adminPwd, setAdminPwd] = useState("");
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [adminError, setAdminError] = useState("");
+  const [adminChecking, setAdminChecking] = useState(false);
+  const [keyStatus, setKeyStatus] = useState(null); // { hasKey, gateway, maskedKey }
+  const [newApiKey, setNewApiKey] = useState("");
+  const [showNewKey, setShowNewKey] = useState(false);
+  const [keySaving, setKeySaving] = useState(false);
+  const [keySaved, setKeySaved] = useState(false);
+
+  const BACKEND = "https://smart-boy-67510347.base44.app/functions";
+
+  // Busca status da key ao abrir (sem expor a key)
+  useEffect(() => {
+    fetch(BACKEND + "/manageApiKey", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "status" }),
+    }).then(r => r.json()).then(d => setKeyStatus(d)).catch(() => {});
+  }, []);
+
+  const handleAdminUnlock = async () => {
+    if (!adminPwd.trim() || adminChecking) return;
+    setAdminChecking(true);
+    setAdminError("");
+    try {
+      const res = await fetch(BACKEND + "/manageApiKey", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "getKey", adminPassword: adminPwd }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setAdminUnlocked(true);
+        setNewApiKey(data.apiKey || "");
+        setAdminPwd("");
+      } else {
+        setAdminError("Senha de admin incorreta");
+        setAdminPwd("");
+        setTimeout(() => setAdminError(""), 2500);
+      }
+    } catch {
+      setAdminError("Erro de conexão");
+    } finally {
+      setAdminChecking(false);
+    }
+  };
+
+  const handleSaveKey = async () => {
+    if (!newApiKey.trim() || keySaving) return;
+    setKeySaving(true);
+    try {
+      const res = await fetch(BACKEND + "/manageApiKey", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "setKey", adminPassword: "Admin@JN2025", newApiKey }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setKeyStatus({ hasKey: true, gateway: data.gateway, maskedKey: data.maskedKey });
+        setKeySaved(true);
+        setAdminUnlocked(false);
+        setNewApiKey("");
+        setTimeout(() => setKeySaved(false), 2500);
+      } else {
+        setAdminError(data.error || "Erro ao salvar");
+      }
+    } catch {
+      setAdminError("Erro de conexão");
+    } finally {
+      setKeySaving(false);
+    }
+  };
+
   const handleSave = () => { saveSettings(settings); onThemeChange(settings.theme); setSaved(true); setTimeout(() => { setSaved(false); onClose(); }, 900); };
   const inputStyle = { width: "100%", background: T.input, border: "1px solid " + T.inputBorder, borderRadius: 8, padding: "10px 14px", color: T.text, fontSize: "0.9rem", fontFamily: "inherit", outline: "none", boxSizing: "border-box" };
   return (
@@ -647,18 +752,89 @@ function SettingsModal({ onClose, onThemeChange }) {
           </div>
           <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: T.textMuted, fontSize: "1.2rem" }}>✕</button>
         </div>
-        <div style={{ marginBottom: 22 }}>
-          <div style={{ marginBottom: 7 }}><span style={{ fontSize: "0.72rem", fontWeight: 700, color: T.textDim, textTransform: "uppercase" }}>Chave API / API Key</span></div>
-          <div style={{ position: "relative" }}>
-            <input type={showKey ? "text" : "password"} value={settings.apiKey} onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })} style={{ ...inputStyle, paddingRight: 44 }} placeholder="sk-or-..." />
-            <button onClick={() => setShowKey(!showKey)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: T.textMuted, fontSize: "1rem" }}>{showKey ? "🙈" : "👁️"}</button>
-          </div>
-          {gatewayInfo && (
-            <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, background: gatewayInfo.color + "18", border: "1px solid " + gatewayInfo.color + "66" }}>
-              <span style={{ color: gatewayInfo.color, fontWeight: 700, fontSize: "0.8rem" }}>✓ {gatewayInfo.name}</span>
-              <span style={{ color: T.textMuted, fontSize: "0.78rem", marginLeft: 8 }}>{gatewayInfo.description}</span>
+
+        {/* ── API Key — Seção Admin ── */}
+        <div style={{ marginBottom: 22, border: "1px solid " + (T.isLight ? "#e5e7eb" : "#2a2a2e"), borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ padding: "12px 16px", background: T.isLight ? "#f9fafb" : "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: "0.72rem", fontWeight: 700, color: T.textDim, textTransform: "uppercase" }}>🔑 Chave API / API Key</span>
+              {keyStatus?.hasKey && (
+                <span style={{ fontSize: "0.7rem", background: "#dcfce7", color: "#16a34a", border: "1px solid #86efac", borderRadius: 999, padding: "1px 8px", fontWeight: 700 }}>
+                  ✓ Configurada
+                </span>
+              )}
             </div>
-          )}
+            {keyStatus && (
+              <span style={{ fontSize: "0.75rem", color: T.textMuted, fontFamily: "monospace" }}>
+                {keyStatus.maskedKey}
+              </span>
+            )}
+          </div>
+          <div style={{ padding: 16 }}>
+            {keySaved && (
+              <div style={{ padding: "8px 12px", borderRadius: 8, background: "#dcfce7", border: "1px solid #86efac", color: "#16a34a", fontSize: "0.84rem", fontWeight: 600, marginBottom: 12 }}>
+                ✅ Chave atualizada com sucesso!
+              </div>
+            )}
+            {!adminUnlocked ? (
+              <div>
+                <p style={{ margin: "0 0 10px", fontSize: "0.82rem", color: T.textMuted }}>
+                  🔒 Para ver ou alterar a chave, informe a senha de administrador.
+                </p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="password"
+                    value={adminPwd}
+                    onChange={e => setAdminPwd(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleAdminUnlock()}
+                    placeholder="Senha de admin..."
+                    style={{ ...inputStyle, flex: 1, padding: "8px 12px", fontSize: "0.85rem", border: "1px solid " + (adminError ? "#fca5a5" : T.inputBorder), background: adminError ? (T.isLight ? "#fef2f2" : "rgba(220,38,38,0.08)") : T.input }}
+                  />
+                  <button onClick={handleAdminUnlock} disabled={adminChecking}
+                    style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: adminChecking ? T.textDim : "#001969", color: "#fff", fontWeight: 700, fontSize: "0.85rem", cursor: adminChecking ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>
+                    {adminChecking ? "..." : "🔓 Acessar"}
+                  </button>
+                </div>
+                {adminError && <p style={{ margin: "6px 0 0", color: "#dc2626", fontSize: "0.78rem" }}>{adminError}</p>}
+              </div>
+            ) : (
+              <div>
+                <p style={{ margin: "0 0 10px", fontSize: "0.82rem", color: "#16a34a", fontWeight: 600 }}>🔓 Admin desbloqueado — altere a chave abaixo:</p>
+                <div style={{ position: "relative", marginBottom: 10 }}>
+                  <input
+                    type={showNewKey ? "text" : "password"}
+                    value={newApiKey}
+                    onChange={e => setNewApiKey(e.target.value)}
+                    placeholder="sk-or-v1-... ou sk-ant-..."
+                    style={{ ...inputStyle, paddingRight: 44, fontFamily: "monospace", fontSize: "0.82rem" }}
+                  />
+                  <button onClick={() => setShowNewKey(!showNewKey)}
+                    style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: T.textMuted, fontSize: "1rem" }}>
+                    {showNewKey ? "🙈" : "👁️"}
+                  </button>
+                </div>
+                {newApiKey && (
+                  <div style={{ marginBottom: 10, padding: "6px 10px", borderRadius: 7, background: GATEWAYS.find(g => g.id === detectGateway(newApiKey))?.color + "18" || "transparent", border: "1px solid " + (GATEWAYS.find(g => g.id === detectGateway(newApiKey))?.color + "44" || T.inputBorder), fontSize: "0.78rem" }}>
+                    <span style={{ color: GATEWAYS.find(g => g.id === detectGateway(newApiKey))?.color || T.textMuted, fontWeight: 700 }}>
+                      ✓ {GATEWAYS.find(g => g.id === detectGateway(newApiKey))?.name || "Gateway desconhecido"}
+                    </span>
+                    <span style={{ color: T.textMuted, marginLeft: 8 }}>{GATEWAYS.find(g => g.id === detectGateway(newApiKey))?.description || ""}</span>
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={handleSaveKey} disabled={keySaving || !newApiKey.trim()}
+                    style={{ flex: 1, padding: "9px", borderRadius: 8, border: "none", background: keySaving ? T.textDim : "#001969", color: "#fff", fontWeight: 700, fontSize: "0.88rem", cursor: (keySaving || !newApiKey.trim()) ? "not-allowed" : "pointer" }}>
+                    {keySaving ? "Salvando..." : "💾 Salvar chave no servidor"}
+                  </button>
+                  <button onClick={() => { setAdminUnlocked(false); setNewApiKey(""); setAdminError(""); }}
+                    style={{ padding: "9px 14px", borderRadius: 8, border: "1px solid " + T.inputBorder, background: "transparent", color: T.textMuted, cursor: "pointer", fontSize: "0.85rem" }}>
+                    Cancelar
+                  </button>
+                </div>
+                {adminError && <p style={{ margin: "6px 0 0", color: "#dc2626", fontSize: "0.78rem" }}>{adminError}</p>}
+              </div>
+            )}
+          </div>
         </div>
         <div style={{ marginBottom: 22 }}>
           <div style={{ marginBottom: 7 }}><span style={{ fontSize: "0.72rem", fontWeight: 700, color: T.textDim, textTransform: "uppercase" }}>Tema / Theme</span></div>
@@ -899,13 +1075,14 @@ function HomeApp() {
         const attachText = textAttachments.map(a => "[Arquivo: " + a.name + "]\n" + a.content).join("\n\n---\n\n");
         fullPrompt += "\n\n[Anexos]\n" + attachText;
       }
-      const modelResults = await Promise.all(
-        selectedModels.map(async (modelId) => {
-          const result = await callModelDirect(modelId, fullPrompt, currentSettings.apiKey);
-          return [modelId, result];
-        })
-      );
-      const data = { results: Object.fromEntries(modelResults), gateway: detectGateway(currentSettings.apiKey) };
+      // Chama o backend queryAI que tem a API Key armazenada no servidor
+      const queryRes = await fetch("https://smart-boy-67510347.base44.app/functions/queryAI", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: fullPrompt, models: selectedModels, imageBase64: imageAttachment || undefined }),
+      });
+      if (!queryRes.ok) { const errData = await queryRes.json().catch(() => ({})); throw new Error(errData.error || "Erro no servidor"); }
+      const data = await queryRes.json();
       setResults(data.results);
       setLastQuestion(prompt);
       const ranked = Object.entries(data.results || {})
@@ -951,7 +1128,7 @@ function HomeApp() {
       let consolResult = null;
       let lastErr = "Sem resposta";
       for (const modelId of fallbackOrder) {
-        const attempt = await callModelDirect(modelId, consolidationPrompt, currentSettings.apiKey);
+        const attempt = await callModelDirect(modelId, consolidationPrompt, "");
         if (attempt?.response && !attempt.error) { consolResult = attempt; break; }
         lastErr = attempt?.error || lastErr;
       }
