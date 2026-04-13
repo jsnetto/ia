@@ -1,5 +1,3 @@
-const DEFAULT_API_KEY = "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";
-
 // Vision-capable models on OpenRouter
 const VISION_MODELS = new Set(["openai", "gemini", "claude"]);
 
@@ -121,10 +119,17 @@ async function callModel(gateway: string, config: { url: string; headers: Record
 }
 
 Deno.serve(async (req) => {
+  const ALLOWED_ORIGINS = [
+    "https://ia.jonasnetto.com.br",
+    "https://smart-boy-app-0e7bef6a.base44.app",
+  ];
+  const reqOrigin = req.headers.get("origin") || "";
+  const allowedOrigin = ALLOWED_ORIGINS.includes(reqOrigin) ? reqOrigin : ALLOWED_ORIGINS[0];
   const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Headers": "content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
   };
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -134,7 +139,20 @@ Deno.serve(async (req) => {
 
     if (!prompt) return Response.json({ error: "Prompt é obrigatório" }, { status: 400, headers: corsHeaders });
 
-    const OPENROUTER_API_KEY = apiKey || DEFAULT_API_KEY;
+    // Se o cliente não enviou apiKey, busca do servidor (manageApiKey)
+    let OPENROUTER_API_KEY = apiKey || "";
+    if (!OPENROUTER_API_KEY) {
+      try {
+        const keyRes = await fetch("https://smart-boy-67510347.base44.app/functions/manageApiKey", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "origin": "https://smart-boy-app-0e7bef6a.base44.app" },
+          body: JSON.stringify({ action: "getKey", adminPassword: "Admin@JN2025" }),
+        });
+        const keyData = await keyRes.json();
+        OPENROUTER_API_KEY = keyData.apiKey || "";
+      } catch { /* usa vazio */ }
+    }
+    if (!OPENROUTER_API_KEY) return Response.json({ error: "API Key não configurada. Acesse ⚙️ Configurações." }, { status: 400, headers: corsHeaders });
     const gateway = detectGateway(OPENROUTER_API_KEY);
     const selectedModels: string[] = models || ["openai", "gemini", "deepseek"];
     const results: Record<string, { response?: string; error?: string; time?: number; gateway?: string }> = {};
