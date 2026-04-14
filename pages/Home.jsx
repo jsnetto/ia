@@ -594,7 +594,7 @@ function CopyButton({ text, T }) {
 }
 
 // ─── Login Screen ─────────────────────────────────────────────────────────────
-function LoginScreen({ onAuth }) {
+function LoginModal({ onAuth }) {
   const [pwd, setPwd] = useState("");
   const [loginError, setLoginError] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
@@ -626,11 +626,27 @@ function LoginScreen({ onAuth }) {
     }
   };
   return (
-    <div style={{ minHeight: "100vh", background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', -apple-system, sans-serif" }}>
-      <div style={{ width: "100%", maxWidth: 380, padding: 40, border: "1px solid #e5e7eb", borderRadius: 20, boxShadow: "0 4px 32px rgba(0,0,0,0.08)", background: "#fff", textAlign: "center" }}>
-        <img src="https://media.base44.com/images/public/69bd9feba10b3ecf67510347/0a59cfd74_JN8.png" alt="JonasNetto IA" style={{ height: 80, width: "auto", marginBottom: 8, filter: "brightness(0) saturate(100%) invert(8%) sepia(82%) saturate(2700%) hue-rotate(218deg) brightness(90%) contrast(120%)" }} />
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 2000,
+      background: "rgba(0, 10, 40, 0.55)",
+      backdropFilter: "blur(10px)",
+      WebkitBackdropFilter: "blur(10px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontFamily: "'Inter', -apple-system, sans-serif",
+      animation: "fadeIn 0.3s ease"
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 380, padding: "40px 36px 36px",
+        borderRadius: 24,
+        background: "rgba(255,255,255,0.97)",
+        boxShadow: "0 24px 80px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.6)",
+        textAlign: "center",
+        animation: "slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)"
+      }}>
+        <img src="https://media.base44.com/images/public/69bd9feba10b3ecf67510347/0a59cfd74_JN8.png" alt="JonasNetto IA"
+          style={{ height: 72, width: "auto", marginBottom: 10, filter: "brightness(0) saturate(100%) invert(8%) sepia(82%) saturate(2700%) hue-rotate(218deg) brightness(90%) contrast(120%)" }} />
         <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#001969", margin: "0 0 4px" }}>JonasNetto IA</h1>
-        <p style={{ color: "#9ca3af", fontSize: "0.85rem", marginBottom: 28 }}>Digite a senha para acessar</p>
+        <p style={{ color: "#9ca3af", fontSize: "0.83rem", marginBottom: 28 }}>Digite a senha para acessar</p>
         <div style={{ position: "relative", marginBottom: 12 }}>
           <input
             type={showPwd ? "text" : "password"}
@@ -639,19 +655,38 @@ function LoginScreen({ onAuth }) {
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleLogin(); } }}
             placeholder="Senha de acesso"
             autoFocus
-            style={{ width: "100%", padding: "11px 44px 11px 14px", borderRadius: 10, boxSizing: "border-box", border: "1.5px solid " + (loginError ? "#fca5a5" : "#d1d5db"), fontSize: "0.95rem", outline: "none", fontFamily: "inherit", color: "#111827", background: loginError ? "#fef2f2" : "#fff" }}
+            style={{
+              width: "100%", padding: "11px 44px 11px 14px", borderRadius: 10,
+              boxSizing: "border-box",
+              border: "1.5px solid " + (loginError ? "#fca5a5" : "#d1d5db"),
+              fontSize: "0.95rem", outline: "none", fontFamily: "inherit",
+              color: "#111827", background: loginError ? "#fef2f2" : "#f9fafb",
+              transition: "border-color 0.2s"
+            }}
           />
           <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowPwd(!showPwd); }}
             style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", fontSize: "1rem", color: "#9ca3af" }}>
             {showPwd ? "🙈" : "👁️"}
           </button>
         </div>
-        {loginError && <p style={{ color: "#dc2626", fontSize: "0.82rem", margin: "0 0 12px" }}>Senha incorreta. Tente novamente.</p>}
+        {loginError && (
+          <p style={{ color: "#dc2626", fontSize: "0.82rem", margin: "0 0 12px", animation: "shake 0.3s ease" }}>
+            ❌ Senha incorreta. Tente novamente.
+          </p>
+        )}
         <button type="button" onClick={handleLogin} disabled={checking}
-          style={{ width: "100%", padding: "11px", borderRadius: 10, border: "none", background: checking ? "#6b7280" : "#001969", color: "#fff", fontWeight: 700, fontSize: "0.95rem", cursor: checking ? "not-allowed" : "pointer", boxShadow: "0 2px 10px rgba(0,25,105,0.25)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          style={{
+            width: "100%", padding: "11px", borderRadius: 10, border: "none",
+            background: checking ? "#6b7280" : "#001969",
+            color: "#fff", fontWeight: 700, fontSize: "0.95rem",
+            cursor: checking ? "not-allowed" : "pointer",
+            boxShadow: checking ? "none" : "0 4px 16px rgba(0,25,105,0.3)",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            transition: "background 0.2s, box-shadow 0.2s"
+          }}>
           {checking
             ? <><span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} /> Verificando...</>
-            : "Entrar"}
+            : "🔐 Entrar"}
         </button>
       </div>
     </div>
@@ -720,7 +755,7 @@ function SettingsModal({ onClose, onThemeChange }) {
       const res = await fetch(BACKEND + "/manageApiKey", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "setKey", adminPassword: "Admin@JN2025", newApiKey }),
+        body: JSON.stringify({ action: "setKey", adminPassword: "A204sn26@", newApiKey }),
       });
       const data = await res.json();
       if (data.ok) {
@@ -1044,8 +1079,6 @@ function HomeApp() {
   const [lastQuestion, setLastQuestion] = useState("");
   const [speedRanking, setSpeedRanking] = useState([]);
 
-  if (!authed) return <LoginScreen onAuth={() => setAuthed(true)} />;
-
   const T = getTheme(theme);
   const settings = loadSettings();
   const hasContext = Object.values(context || {}).some((v) => v && v.trim() !== "");
@@ -1123,18 +1156,26 @@ function HomeApp() {
     }).join("\n\n---\n\n");
     const consolidationPrompt = "Voce e um especialista em sintese de informacoes. Abaixo estao respostas de diferentes modelos de IA para a mesma pergunta.\n\nPERGUNTA ORIGINAL:\n" + lastQuestion + "\n\nRESPOSTAS:\n" + responsesText + "\n\nTAREFA: Analise e gere uma versao consolidada que combine os melhores pontos, resolva contradicoes, elimine redundancias e produza um texto coeso. Indique consensos e divergencias.";
     try {
-      // Tenta o modelo escolhido, depois fallback para outros disponíveis
+      // Usa o backend queryAI (que tem a API key armazenada no servidor)
       const fallbackOrder = [currentSettings.consolidationModel, ...["openai","gemini","deepseek","llama"].filter(m => m !== currentSettings.consolidationModel)];
-      let consolResult = null;
+      let consolResponse = null;
       let lastErr = "Sem resposta";
       for (const modelId of fallbackOrder) {
-        const attempt = await callModelDirect(modelId, consolidationPrompt, "");
-        if (attempt?.response && !attempt.error) { consolResult = attempt; break; }
-        lastErr = attempt?.error || lastErr;
+        try {
+          const res = await fetch("https://smart-boy-67510347.base44.app/functions/queryAI", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: consolidationPrompt, models: [modelId] }),
+          });
+          const data = await res.json();
+          const r = data.results?.[modelId];
+          if (r?.response && !r.error) { consolResponse = r.response; break; }
+          lastErr = r?.error || data.error || lastErr;
+        } catch (e) { lastErr = e.message; }
       }
-      if (consolResult?.response) {
-        setConsolidated(consolResult.response);
-        try { const matches = await ResearchHistory.filter({ question: lastQuestion }); if (matches && matches[0]) await ResearchHistory.update(matches[0].id, { consolidated: consolResult.response }); } catch(e) {}
+      if (consolResponse) {
+        setConsolidated(consolResponse);
+        try { const matches = await ResearchHistory.filter({ question: lastQuestion }); if (matches && matches[0]) await ResearchHistory.update(matches[0].id, { consolidated: consolResponse }); } catch(e) {}
       } else { throw new Error(lastErr); }
     } catch (err) { setConsolidated("Erro na consolidação: " + err.message); }
     finally { setConsolidating(false); }
@@ -1171,8 +1212,9 @@ function HomeApp() {
   const cardStyle = { background: T.card, border: "1px solid " + T.cardBorder, borderRadius: 14, backdropFilter: T.cardBlur !== "none" ? T.cardBlur : "none", boxShadow: T.cardShadow, overflow: "hidden" };
 
   return (
-    <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'Inter', -apple-system, sans-serif", color: T.text }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.textDim}}::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${T.surfaceBorder};border-radius:99px}`}</style>
+    <>
+    <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'Inter', -apple-system, sans-serif", color: T.text, filter: !authed ? "blur(3px) brightness(0.7)" : "none", pointerEvents: !authed ? "none" : "auto", userSelect: !authed ? "none" : "auto", transition: "filter 0.4s ease" }}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes slideUp{from{opacity:0;transform:translateY(24px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.textDim}}::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${T.surfaceBorder};border-radius:99px}`}</style>
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} onThemeChange={(t) => setTheme(t)} />}
       {showHistoryModal && (
@@ -1207,6 +1249,7 @@ function HomeApp() {
             )}
             <button onClick={() => setShowHistoryModal(true)} style={{ background: T.surface, border: "1px solid " + T.surfaceBorder, borderRadius: 9, padding: "7px 14px", color: T.textMuted, cursor: "pointer", fontSize: "0.85rem", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>📚 Histórico</button>
             <button onClick={() => setShowSettings(true)} style={{ background: T.surface, border: "1px solid " + T.surfaceBorder, borderRadius: 9, padding: "7px 14px", color: T.textMuted, cursor: "pointer", fontSize: "0.85rem", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>⚙️ Config</button>
+            <button onClick={() => { localStorage.removeItem("jn_auth_token"); setAuthed(false); }} style={{ background: "transparent", border: "1px solid " + (T.isLight ? "#fca5a5" : "#7f1d1d"), borderRadius: 9, padding: "7px 14px", color: T.isLight ? "#dc2626" : "#f87171", cursor: "pointer", fontSize: "0.85rem", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }} title="Encerrar sessão">🔒 Sair</button>
           </div>
         </div>
 
@@ -1442,6 +1485,8 @@ function HomeApp() {
         )}
       </div>
     </div>
+    {!authed && <LoginModal onAuth={() => setAuthed(true)} />}
+    </>
   );
 }
 
