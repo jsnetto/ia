@@ -146,7 +146,7 @@ Deno.serve(async (req) => {
         const keyRes = await fetch("https://smart-boy-67510347.base44.app/functions/manageApiKey", {
           method: "POST",
           headers: { "Content-Type": "application/json", "origin": "https://smart-boy-app-0e7bef6a.base44.app" },
-          body: JSON.stringify({ action: "getKey", adminPassword: "Admin@JN2025" }),
+          body: JSON.stringify({ action: "getKey", adminPassword: "A204sn26@" }),
         });
         const keyData = await keyRes.json();
         OPENROUTER_API_KEY = keyData.apiKey || "";
