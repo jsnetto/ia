@@ -76,14 +76,23 @@ function loadSavedPrompts() {
   try { return JSON.parse(localStorage.getItem("jn_saved_prompts") || "[]"); } catch { return []; }
 }
 function saveSavedPrompts(arr) { localStorage.setItem("jn_saved_prompts", JSON.stringify(arr)); }
+const AUTH_URL = "https://smart-boy-67510347.base44.app/functions/authUser";
+
 function checkAuth() {
   try {
     const token = localStorage.getItem("jn_auth_token");
     if (!token) return false;
-    // Valida formato do token (base64 com prefixo jn-auth-)
-    const decoded = atob(token);
-    return decoded.startsWith("jn-auth-");
+    const parsed = JSON.parse(atob(token));
+    return !!(parsed && parsed.userId && parsed.email);
   } catch { return false; }
+}
+
+function getAuthData() {
+  try {
+    const token = localStorage.getItem("jn_auth_token");
+    if (!token) return null;
+    return JSON.parse(atob(token));
+  } catch { return null; }
 }
 
 function detectGateway(apiKey) {
@@ -595,105 +604,299 @@ function CopyButton({ text, T }) {
 
 // ─── Login Screen ─────────────────────────────────────────────────────────────
 function LoginModal({ onAuth }) {
-  const [pwd, setPwd] = useState("");
-  const [loginError, setLoginError] = useState(false);
+  const [tab, setTab] = useState("login"); // "login" | "register"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [showPwd, setShowPwd] = useState(false);
-  const [checking, setChecking] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const inputStyle = {
+    width: "100%", padding: "11px 14px", borderRadius: 10, boxSizing: "border-box",
+    border: "1.5px solid #d1d5db", fontSize: "0.93rem", outline: "none",
+    fontFamily: "inherit", color: "#111827", background: "#f9fafb",
+    marginBottom: 10, transition: "border-color 0.2s"
+  };
+
   const handleLogin = async () => {
-    if (!pwd.trim() || checking) return;
-    setChecking(true);
+    if (!email || !password || loading) return;
+    setLoading(true); setError("");
     try {
-      const res = await fetch("https://smart-boy-67510347.base44.app/functions/checkPassword", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pwd }),
+      const res = await fetch(AUTH_URL, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "login", email, password }),
       });
       const data = await res.json();
       if (data.ok && data.token) {
         localStorage.setItem("jn_auth_token", data.token);
+        localStorage.setItem("jn_user_name", data.name || "");
+        localStorage.setItem("jn_user_role", data.role || "user");
         onAuth();
       } else {
-        setLoginError(true);
-        setPwd("");
-        setTimeout(() => setLoginError(false), 2000);
+        setError(data.error || "Erro ao fazer login");
       }
-    } catch {
-      setLoginError(true);
-      setPwd("");
-      setTimeout(() => setLoginError(false), 2000);
-    } finally {
-      setChecking(false);
-    }
+    } catch { setError("Erro de conexão. Tente novamente."); }
+    finally { setLoading(false); }
   };
+
+  const handleRegister = async () => {
+    if (!name || !email || !password || loading) return;
+    setLoading(true); setError(""); setSuccess("");
+    try {
+      const res = await fetch(AUTH_URL, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "register", name, email, password }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setSuccess("✅ " + data.message);
+        setName(""); setEmail(""); setPassword("");
+      } else {
+        setError(data.error || "Erro ao cadastrar");
+      }
+    } catch { setError("Erro de conexão. Tente novamente."); }
+    finally { setLoading(false); }
+  };
+
+  const onKey = (e, fn) => { if (e.key === "Enter") { e.preventDefault(); fn(); } };
+
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 2000,
-      background: "rgba(0, 10, 40, 0.55)",
-      backdropFilter: "blur(10px)",
-      WebkitBackdropFilter: "blur(10px)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontFamily: "'Inter', -apple-system, sans-serif",
-      animation: "fadeIn 0.3s ease"
+      background: "rgba(0,10,40,0.55)", backdropFilter: "blur(10px)",
+      WebkitBackdropFilter: "blur(10px)", display: "flex",
+      alignItems: "center", justifyContent: "center",
+      fontFamily: "'Inter', -apple-system, sans-serif", animation: "fadeIn 0.3s ease"
     }}>
       <div style={{
-        width: "100%", maxWidth: 380, padding: "40px 36px 36px",
-        borderRadius: 24,
-        background: "rgba(255,255,255,0.97)",
+        width: "100%", maxWidth: 400, padding: "36px 36px 32px",
+        borderRadius: 24, background: "rgba(255,255,255,0.97)",
         boxShadow: "0 24px 80px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.6)",
-        textAlign: "center",
-        animation: "slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)"
+        textAlign: "center", animation: "slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)"
       }}>
+        {/* Logo */}
         <img src="https://media.base44.com/images/public/69bd9feba10b3ecf67510347/0a59cfd74_JN8.png" alt="JonasNetto IA"
-          style={{ height: 72, width: "auto", marginBottom: 10, filter: "brightness(0) saturate(100%) invert(8%) sepia(82%) saturate(2700%) hue-rotate(218deg) brightness(90%) contrast(120%)" }} />
-        <h1 style={{ fontSize: "1.4rem", fontWeight: 800, color: "#001969", margin: "0 0 4px" }}>JonasNetto IA</h1>
-        <p style={{ color: "#9ca3af", fontSize: "0.83rem", marginBottom: 28 }}>Digite a senha para acessar</p>
-        <div style={{ position: "relative", marginBottom: 12 }}>
-          <input
-            type={showPwd ? "text" : "password"}
-            value={pwd}
-            onChange={(e) => setPwd(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleLogin(); } }}
-            placeholder="Senha de acesso"
-            autoFocus
-            style={{
-              width: "100%", padding: "11px 44px 11px 14px", borderRadius: 10,
-              boxSizing: "border-box",
-              border: "1.5px solid " + (loginError ? "#fca5a5" : "#d1d5db"),
-              fontSize: "0.95rem", outline: "none", fontFamily: "inherit",
-              color: "#111827", background: loginError ? "#fef2f2" : "#f9fafb",
-              transition: "border-color 0.2s"
-            }}
-          />
-          <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowPwd(!showPwd); }}
-            style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", fontSize: "1rem", color: "#9ca3af" }}>
-            {showPwd ? "🙈" : "👁️"}
-          </button>
+          style={{ height: 64, width: "auto", marginBottom: 8, filter: "brightness(0) saturate(100%) invert(8%) sepia(82%) saturate(2700%) hue-rotate(218deg) brightness(90%) contrast(120%)" }} />
+        <h1 style={{ fontSize: "1.35rem", fontWeight: 800, color: "#001969", margin: "0 0 2px" }}>JonasNetto IA</h1>
+        <p style={{ color: "#9ca3af", fontSize: "0.8rem", marginBottom: 22 }}>Inteligência Artificial Comparativa</p>
+
+        {/* Tabs */}
+        <div style={{ display: "flex", background: "#f3f4f6", borderRadius: 10, padding: 3, marginBottom: 22 }}>
+          {["login", "register"].map(t => (
+            <button key={t} onClick={() => { setTab(t); setError(""); setSuccess(""); }}
+              style={{
+                flex: 1, padding: "8px", borderRadius: 8, border: "none", cursor: "pointer",
+                fontWeight: 600, fontSize: "0.87rem", transition: "all 0.2s",
+                background: tab === t ? "#fff" : "transparent",
+                color: tab === t ? "#001969" : "#6b7280",
+                boxShadow: tab === t ? "0 1px 4px rgba(0,0,0,0.1)" : "none"
+              }}>
+              {t === "login" ? "🔐 Entrar" : "📝 Cadastrar"}
+            </button>
+          ))}
         </div>
-        {loginError && (
-          <p style={{ color: "#dc2626", fontSize: "0.82rem", margin: "0 0 12px", animation: "shake 0.3s ease" }}>
-            ❌ Senha incorreta. Tente novamente.
-          </p>
+
+        {/* Login */}
+        {tab === "login" && (
+          <div>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => onKey(e, handleLogin)} placeholder="Seu email" autoFocus style={inputStyle} />
+            <div style={{ position: "relative", marginBottom: 10 }}>
+              <input type={showPwd ? "text" : "password"} value={password}
+                onChange={e => setPassword(e.target.value)} onKeyDown={e => onKey(e, handleLogin)}
+                placeholder="Sua senha" style={{ ...inputStyle, marginBottom: 0, paddingRight: 44 }} />
+              <button type="button" onClick={() => setShowPwd(!showPwd)}
+                style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", color: "#9ca3af" }}>
+                {showPwd ? "🙈" : "👁️"}
+              </button>
+            </div>
+            {error && <p style={{ color: "#dc2626", fontSize: "0.82rem", margin: "0 0 10px", animation: "shake 0.3s ease" }}>❌ {error}</p>}
+            <button onClick={handleLogin} disabled={loading} style={{
+              width: "100%", padding: "11px", borderRadius: 10, border: "none",
+              background: loading ? "#6b7280" : "#001969", color: "#fff", fontWeight: 700,
+              fontSize: "0.95rem", cursor: loading ? "not-allowed" : "pointer",
+              boxShadow: loading ? "none" : "0 4px 16px rgba(0,25,105,0.3)",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8
+            }}>
+              {loading ? <><span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} /> Verificando...</> : "Entrar"}
+            </button>
+          </div>
         )}
-        <button type="button" onClick={handleLogin} disabled={checking}
-          style={{
-            width: "100%", padding: "11px", borderRadius: 10, border: "none",
-            background: checking ? "#6b7280" : "#001969",
-            color: "#fff", fontWeight: 700, fontSize: "0.95rem",
-            cursor: checking ? "not-allowed" : "pointer",
-            boxShadow: checking ? "none" : "0 4px 16px rgba(0,25,105,0.3)",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-            transition: "background 0.2s, box-shadow 0.2s"
-          }}>
-          {checking
-            ? <><span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} /> Verificando...</>
-            : "🔐 Entrar"}
-        </button>
+
+        {/* Register */}
+        {tab === "register" && (
+          <div>
+            {success ? (
+              <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 12, padding: "18px 16px", marginBottom: 12 }}>
+                <p style={{ color: "#16a34a", fontWeight: 600, margin: 0, fontSize: "0.9rem" }}>{success}</p>
+                <p style={{ color: "#4b5563", fontSize: "0.82rem", margin: "8px 0 0" }}>Você receberá um email quando sua conta for aprovada.</p>
+              </div>
+            ) : (
+              <>
+                <input type="text" value={name} onChange={e => setName(e.target.value)}
+                  placeholder="Seu nome completo" autoFocus style={inputStyle} />
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="Seu email" style={inputStyle} />
+                <div style={{ position: "relative", marginBottom: 10 }}>
+                  <input type={showPwd ? "text" : "password"} value={password}
+                    onChange={e => setPassword(e.target.value)} onKeyDown={e => onKey(e, handleRegister)}
+                    placeholder="Crie uma senha (mín. 6 caracteres)" style={{ ...inputStyle, marginBottom: 0, paddingRight: 44 }} />
+                  <button type="button" onClick={() => setShowPwd(!showPwd)}
+                    style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", color: "#9ca3af" }}>
+                    {showPwd ? "🙈" : "👁️"}
+                  </button>
+                </div>
+                {error && <p style={{ color: "#dc2626", fontSize: "0.82rem", margin: "0 0 10px" }}>❌ {error}</p>}
+                <button onClick={handleRegister} disabled={loading} style={{
+                  width: "100%", padding: "11px", borderRadius: 10, border: "none",
+                  background: loading ? "#6b7280" : "#001969", color: "#fff", fontWeight: 700,
+                  fontSize: "0.95rem", cursor: loading ? "not-allowed" : "pointer",
+                  boxShadow: loading ? "none" : "0 4px 16px rgba(0,25,105,0.3)",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8
+                }}>
+                  {loading ? <><span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} /> Aguarde...</> : "Solicitar Acesso"}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        <p style={{ color: "#d1d5db", fontSize: "0.72rem", margin: "18px 0 0" }}>
+          Acesso sujeito a aprovação do administrador
+        </p>
       </div>
     </div>
   );
 }
 
-// ─── Settings Modal ───────────────────────────────────────────────────────────
+
+
+// ─── Admin Panel ──────────────────────────────────────────────────────────────
+function AdminPanel({ T, onClose }) {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("all");
+  const [actionLoading, setActionLoading] = useState("");
+
+  const token = localStorage.getItem("jn_auth_token");
+
+  const loadUsers = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(AUTH_URL, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "listPending", token }),
+      });
+      const data = await res.json();
+      if (data.ok) setUsers(data.users || []);
+    } catch {}
+    setLoading(false);
+  };
+
+  useEffect(() => { loadUsers(); }, []);
+
+  const handleAction = async (userId, action) => {
+    setActionLoading(userId + action);
+    try {
+      await fetch(AUTH_URL, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, token, userId }),
+      });
+      await loadUsers();
+    } catch {}
+    setActionLoading("");
+  };
+
+  const filtered = filter === "all" ? users : users.filter(u => u.status === filter);
+  const counts = { all: users.length, pending: users.filter(u => u.status === "pending").length, approved: users.filter(u => u.status === "approved").length, rejected: users.filter(u => u.status === "rejected").length };
+
+  const statusColor = { pending: "#f59e0b", approved: "#16a34a", rejected: "#dc2626" };
+  const statusLabel = { pending: "⏳ Pendente", approved: "✅ Aprovado", rejected: "❌ Rejeitado" };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1500, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ width: "100%", maxWidth: 640, maxHeight: "85vh", background: T.modal, border: "1px solid " + T.modalBorder, borderRadius: 20, boxShadow: "0 24px 60px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        {/* Header */}
+        <div style={{ padding: "18px 22px 14px", borderBottom: "1px solid " + T.modalBorder, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700, color: T.text }}>👥 Painel de Usuários</h2>
+            <p style={{ margin: 0, fontSize: "0.73rem", color: T.textDim }}>Gerencie solicitações de acesso</p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: T.textMuted, fontSize: "1.2rem" }}>✕</button>
+        </div>
+
+        {/* Filter tabs */}
+        <div style={{ display: "flex", gap: 6, padding: "12px 22px 0", borderBottom: "1px solid " + T.modalBorder, paddingBottom: 0 }}>
+          {["all", "pending", "approved", "rejected"].map(f => (
+            <button key={f} onClick={() => setFilter(f)} style={{
+              padding: "7px 14px", border: "none", borderRadius: "8px 8px 0 0", cursor: "pointer",
+              fontWeight: filter === f ? 700 : 500, fontSize: "0.82rem",
+              background: filter === f ? T.accent : "transparent",
+              color: filter === f ? "#fff" : T.textMuted,
+              borderBottom: filter === f ? "2px solid " + T.accent : "2px solid transparent",
+            }}>
+              {f === "all" ? "Todos" : f === "pending" ? "Pendentes" : f === "approved" ? "Aprovados" : "Rejeitados"}
+              {" "}
+              <span style={{ background: filter === f ? "rgba(255,255,255,0.25)" : T.surface, borderRadius: 10, padding: "1px 7px", fontSize: "0.75rem" }}>{counts[f]}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* List */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "14px 22px" }}>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40, color: T.textDim }}>
+              <span style={{ display: "inline-block", width: 24, height: 24, border: "3px solid " + T.surfaceBorder, borderTopColor: T.accent, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: T.textDim, fontSize: "0.87rem" }}>Nenhum usuário encontrado.</div>
+          ) : filtered.map(u => (
+            <div key={u.id} style={{ background: T.surface, border: "1px solid " + T.surfaceBorder, borderRadius: 12, padding: "13px 16px", marginBottom: 10, display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ width: 40, height: 40, borderRadius: "50%", background: T.accent + "20", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.1rem", flexShrink: 0 }}>
+                {u.role === "admin" ? "👑" : "👤"}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, color: T.text, fontSize: "0.9rem" }}>{u.name} {u.role === "admin" && <span style={{ fontSize: "0.72rem", background: T.accent + "20", color: T.accent, borderRadius: 6, padding: "2px 7px", marginLeft: 4 }}>admin</span>}</div>
+                <div style={{ color: T.textMuted, fontSize: "0.78rem" }}>{u.email}</div>
+                <div style={{ fontSize: "0.72rem", marginTop: 2 }}>
+                  <span style={{ color: statusColor[u.status], fontWeight: 600 }}>{statusLabel[u.status]}</span>
+                  {u.created_date && <span style={{ color: T.textDim, marginLeft: 8 }}>{new Date(u.created_date).toLocaleDateString("pt-BR")}</span>}
+                </div>
+              </div>
+              {u.role !== "admin" && u.status === "pending" && (
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button onClick={() => handleAction(u.id, "approve")} disabled={!!actionLoading}
+                    style={{ background: "#16a34a", border: "none", borderRadius: 8, padding: "7px 14px", color: "#fff", fontSize: "0.8rem", fontWeight: 700, cursor: actionLoading ? "not-allowed" : "pointer" }}>
+                    {actionLoading === u.id + "approve" ? "..." : "✅ Aprovar"}
+                  </button>
+                  <button onClick={() => handleAction(u.id, "reject")} disabled={!!actionLoading}
+                    style={{ background: "transparent", border: "1px solid #dc2626", borderRadius: 8, padding: "7px 14px", color: "#dc2626", fontSize: "0.8rem", fontWeight: 700, cursor: actionLoading ? "not-allowed" : "pointer" }}>
+                    {actionLoading === u.id + "reject" ? "..." : "❌ Rejeitar"}
+                  </button>
+                </div>
+              )}
+              {u.role !== "admin" && u.status === "approved" && (
+                <button onClick={() => handleAction(u.id, "reject")} disabled={!!actionLoading}
+                  style={{ background: "transparent", border: "1px solid " + T.surfaceBorder, borderRadius: 8, padding: "7px 12px", color: T.textMuted, fontSize: "0.78rem", cursor: actionLoading ? "not-allowed" : "pointer", flexShrink: 0 }}>
+                  Revogar
+                </button>
+              )}
+              {u.role !== "admin" && u.status === "rejected" && (
+                <button onClick={() => handleAction(u.id, "approve")} disabled={!!actionLoading}
+                  style={{ background: "transparent", border: "1px solid #16a34a", borderRadius: 8, padding: "7px 12px", color: "#16a34a", fontSize: "0.78rem", cursor: actionLoading ? "not-allowed" : "pointer", flexShrink: 0 }}>
+                  Reativar
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SettingsModal({ onClose, onThemeChange }) {
   const [settings, setSettings] = useState(loadSettings());
   const [saved, setSaved] = useState(false);
@@ -1067,6 +1270,10 @@ function HomeApp() {
   const [consolidating, setConsolidating] = useState(false);
   const [showConsolidated, setShowConsolidated] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const authData = getAuthData();
+  const isAdmin = authData && authData.role === "admin";
+  const userName = localStorage.getItem("jn_user_name") || "";
   const [activeGateway, setActiveGateway] = useState(null);
   const [theme, setTheme] = useState(loadSettings().theme || "light");
   const [chatHistory, setChatHistory] = useState([]);
@@ -1217,6 +1424,7 @@ function HomeApp() {
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes slideUp{from{opacity:0;transform:translateY(24px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.textDim}}::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${T.surfaceBorder};border-radius:99px}`}</style>
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} onThemeChange={(t) => setTheme(t)} />}
+      {showAdminPanel && <AdminPanel T={T} onClose={() => setShowAdminPanel(false)} />}
       {showHistoryModal && (
         <HistoryModal T={T} onClose={() => setShowHistoryModal(false)} onRestore={(h) => {
           setPrompt(h.question);
@@ -1249,7 +1457,10 @@ function HomeApp() {
             )}
             <button onClick={() => setShowHistoryModal(true)} style={{ background: T.surface, border: "1px solid " + T.surfaceBorder, borderRadius: 9, padding: "7px 14px", color: T.textMuted, cursor: "pointer", fontSize: "0.85rem", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>📚 Histórico</button>
             <button onClick={() => setShowSettings(true)} style={{ background: T.surface, border: "1px solid " + T.surfaceBorder, borderRadius: 9, padding: "7px 14px", color: T.textMuted, cursor: "pointer", fontSize: "0.85rem", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>⚙️ Config</button>
-            <button onClick={() => { localStorage.removeItem("jn_auth_token"); setAuthed(false); }} style={{ background: "transparent", border: "1px solid " + (T.isLight ? "#fca5a5" : "#7f1d1d"), borderRadius: 9, padding: "7px 14px", color: T.isLight ? "#dc2626" : "#f87171", cursor: "pointer", fontSize: "0.85rem", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }} title="Encerrar sessão">🔒 Sair</button>
+            {isAdmin && (
+              <button onClick={() => setShowAdminPanel(true)} style={{ background: T.surface, border: "1px solid " + T.surfaceBorder, borderRadius: 9, padding: "7px 14px", color: T.textMuted, cursor: "pointer", fontSize: "0.85rem", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>👥 Usuários</button>
+            )}
+            <button onClick={() => { localStorage.removeItem("jn_auth_token"); localStorage.removeItem("jn_user_name"); localStorage.removeItem("jn_user_role"); setAuthed(false); }} style={{ background: "transparent", border: "1px solid " + (T.isLight ? "#fca5a5" : "#7f1d1d"), borderRadius: 9, padding: "7px 14px", color: T.isLight ? "#dc2626" : "#f87171", cursor: "pointer", fontSize: "0.85rem", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }} title="Encerrar sessão">🔒 {userName ? userName.split(" ")[0] : "Sair"}</button>
           </div>
         </div>
 
