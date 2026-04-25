@@ -76,7 +76,7 @@ function loadSavedPrompts() {
   try { return JSON.parse(localStorage.getItem("jn_saved_prompts") || "[]"); } catch { return []; }
 }
 function saveSavedPrompts(arr) { localStorage.setItem("jn_saved_prompts", JSON.stringify(arr)); }
-const AUTH_URL = "https://smart-boy-67510347.base44.app/functions/authUser";
+const AUTH_URL = "https://smart-boy-app-0e7bef6a.base44.app/functions/authUser";
 
 function checkAuth() {
   try {
@@ -913,7 +913,7 @@ function SettingsModal({ onClose, onThemeChange }) {
   const [keySaving, setKeySaving] = useState(false);
   const [keySaved, setKeySaved] = useState(false);
 
-  const BACKEND = "https://smart-boy-67510347.base44.app/functions";
+  const BACKEND = "https://smart-boy-app-0e7bef6a.base44.app/functions";
 
   // Busca status da key ao abrir (sem expor a key)
   useEffect(() => {
@@ -1316,7 +1316,7 @@ function HomeApp() {
         fullPrompt += "\n\n[Anexos]\n" + attachText;
       }
       // Chama o backend queryAI que tem a API Key armazenada no servidor
-      const queryRes = await fetch("https://smart-boy-67510347.base44.app/functions/queryAI", {
+      const queryRes = await fetch("https://smart-boy-app-0e7bef6a.base44.app/functions/queryAI", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: fullPrompt, models: selectedModels, imageBase64: imageAttachment || undefined }),
@@ -1369,7 +1369,7 @@ function HomeApp() {
       let lastErr = "Sem resposta";
       for (const modelId of fallbackOrder) {
         try {
-          const res = await fetch("https://smart-boy-67510347.base44.app/functions/queryAI", {
+          const res = await fetch("https://smart-boy-app-0e7bef6a.base44.app/functions/queryAI", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ prompt: consolidationPrompt, models: [modelId] }),
